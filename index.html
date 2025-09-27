@@ -37,7 +37,8 @@
       statusEl.textContent = 'Looking up…';
       try {
         const q = new URLSearchParams({ address: addr.value });
-        const r = await fetch('https://api.repapp.org/lookup?' + q.toString());
+        const r = await fetch('https://repapp-9lq6.onrender.com/lookup?' + q.toString());
+
         const data = await r.json();
         if (!r.ok) {
           statusEl.textContent = data.error || 'Lookup failed.';
