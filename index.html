@@ -37,7 +37,6 @@
       statusEl.textContent = 'Looking up…';
       try {
         const q = new URLSearchParams({ address: addr.value });
-        // Absolute API URL (Render)
         const r = await fetch('https://repapp-9lq6.onrender.com/lookup?' + q.toString());
         const data = await r.json();
         if (!r.ok) {
@@ -89,7 +88,7 @@
       });
     }
 
-    // Google Places Autocomplete (NH bias)
+    // Google Places Autocomplete (NH bias), no auto-submit
     function initPlaces() {
       const input = document.getElementById('addr');
       if (!input) return;
@@ -113,8 +112,8 @@
           alert('Pick a New Hampshire address.');
           return;
         }
+        // Fill the box only; user clicks Go or presses Enter
         input.value = p.formatted_address;
-        document.getElementById('form').requestSubmit();
       });
     }
   </script>
