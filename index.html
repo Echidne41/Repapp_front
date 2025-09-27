@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>NH Rep Finder (Key Votes)</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Keep Google’s suggestions above everything */
+    .pac-container { z-index: 9999 !important; }
+  </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
   <div class="max-w-md mx-auto p-4 space-y-4">
@@ -13,79 +17,153 @@
       <p class="text-sm text-slate-600">Enter your NH address to see your state reps and their key votes.</p>
     </header>
 
-    <form id="form" class="flex gap-2">
-      <input id="addr" type="text" placeholder="123 Main St, Town"
-             class="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-             required />
-      <button class="px-4 py-2 rounded-lg bg-indigo-600 text-white">Go</button>
+    <!-- novalidate avoids Chrome’s little “!” lockup -->
+    <form id="form" class="flex gap-2" novalidate>
+      <input
+        id="addr"
+        type="search"
+        placeholder="123 Main St, Town"
+        autocomplete="street-address"
+        class="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      />
+      <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 text-white">Go</button>
     </form>
 
-    <div id="status" class="text-sm text-slate-600"></div>
+    <!-- Vote legend -->
+    <div id="legend" class="text-xs text-slate-600 flex gap-3 flex-wrap mt-1">
+      <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500"></span>Yes</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span>No</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span>Absent</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-400"></span>—</span>
+    </div>
 
+    <div id="status" class="text-sm text-slate-600"></div>
     <section id="result" class="space-y-3"></section>
   </div>
 
+  <!-- Main app script -->
   <script>
     const form = document.getElementById('form');
     const addr = document.getElementById('addr');
     const statusEl = document.getElementById('status');
     const resultEl = document.getElementById('result');
 
+    // Don’t submit when user presses Enter in the field
+    addr.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const value = addr.value.trim();
+      if (!value) { statusEl.textContent = 'Type an address.'; return; }
+
       resultEl.innerHTML = '';
       statusEl.textContent = 'Looking up…';
       try {
-        const q = new URLSearchParams({ address: addr.value });
+        const q = new URLSearchParams({ address: value });
+        // API on Render
         const r = await fetch('https://repapp-9lq6.onrender.com/lookup?' + q.toString());
-
         const data = await r.json();
         if (!r.ok) {
           statusEl.textContent = data.error || 'Lookup failed.';
           return;
         }
-        statusEl.textContent = `Base district: ${data.base_district}` + (data.floterials.length ? ` · Floterials: ${data.floterials.join(', ')}` : '');
+        statusEl.textContent =
+          `Base district: ${data.base_district || '—'}` +
+          (Array.isArray(data.floterials) && data.floterials.length ? ` · Floterials: ${data.floterials.join(', ')}` : '');
         renderReps(data.reps, data.vote_columns);
-      } catch (err) {
+      } catch {
         statusEl.textContent = 'Error contacting server.';
       }
     });
+
+    // ---------- UI helpers + render ----------
+    function partyClass(p){
+      p = (p||'').toUpperCase();
+      if (p==='D') return 'bg-blue-100 text-blue-700';
+      if (p==='R') return 'bg-red-100 text-red-700';
+      return 'bg-slate-100 text-slate-700';
+    }
+    function voteClass(v){
+      const up = (v||'').toUpperCase();
+      if (up==='Y' || up==='YES') return 'bg-green-50 border-green-200 text-green-800';
+      if (up==='N' || up==='NO')  return 'bg-red-50 border-red-200 text-red-800';
+      if (up==='A' || up==='EXCUSED' || up==='ABSENT') return 'bg-amber-50 border-amber-200 text-amber-800';
+      return 'bg-slate-50 border-slate-200 text-slate-800';
+    }
+    function fmtKey(k){ return (k||'').replaceAll('_',' ').trim(); }
 
     function renderReps(reps, voteCols) {
       if (!reps || !reps.length) {
         resultEl.innerHTML = '<p class="text-sm text-slate-600">No reps found.</p>';
         return;
       }
+      const cols = Array.isArray(voteCols) ? voteCols : [];
+      resultEl.innerHTML = '';
       reps.forEach(rep => {
-        const card = document.createElement('div');
+        const card = document.createElement('article');
         card.className = 'rounded-xl border bg-white p-4 shadow-sm';
 
         const header = document.createElement('div');
         header.className = 'flex items-center justify-between';
-        header.innerHTML = `<div>
-            <div class="font-medium">${rep.name}</div>
-            <div class="text-xs text-slate-500">${rep.party} · ${rep.district}</div>
-          </div>`;
+        header.innerHTML = `
+          <div>
+            <div class="font-semibold">${rep.name || 'Representative'}</div>
+            <div class="text-xs text-slate-500">${(rep.party||'').toUpperCase()} · ${rep.district || ''}</div>
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-xs font-medium ${partyClass(rep.party)}">
+            ${(rep.party||'').toUpperCase() || '—'}
+          </span>
+        `;
         card.appendChild(header);
 
-        // votes grid
         const grid = document.createElement('div');
-        grid.className = 'mt-3 grid grid-cols-1 gap-2';
-        voteCols.forEach(v => {
-          const val = (rep.votes?.[v] || '').trim();
-          const badge = document.createElement('div');
-          const klass = val.toUpperCase() === 'Y' || val.toUpperCase() === 'YES' ? 'bg-green-100 text-green-700'
-                      : val.toUpperCase() === 'N' || val.toUpperCase() === 'NO'  ? 'bg-red-100 text-red-700'
-                      : 'bg-slate-100 text-slate-700';
-          badge.className = `flex items-center justify-between rounded-lg px-3 py-2 ${klass}`;
-          badge.innerHTML = `<span class="text-sm font-medium">${v}</span><span class="text-sm">${val || '—'}</span>`;
-          grid.appendChild(badge);
+        grid.className = 'mt-3 grid grid-cols-2 md:grid-cols-3 gap-2';
+        cols.forEach(vk => {
+          const val = (rep.votes?.[vk] || '').trim();
+          const row = document.createElement('div');
+          row.className = `flex items-center justify-between rounded-lg border px-2 py-1 text-sm ${voteClass(val)}`;
+          row.innerHTML = `<span class="font-medium">${fmtKey(vk)}</span><span>${val || '—'}</span>`;
+          grid.appendChild(row);
         });
         card.appendChild(grid);
 
         resultEl.appendChild(card);
       });
     }
+
+    // ---------- Google Places Autocomplete (NH bias), no auto-submit ----------
+    function initPlaces() {
+      const input = document.getElementById('addr');
+      if (!input) return;
+
+      const nhBounds = new google.maps.LatLngBounds(
+        { lat: 42.69, lng: -72.60 }, // SW
+        { lat: 45.31, lng: -70.70 }  // NE
+      );
+
+      const ac = new google.maps.places.Autocomplete(input, {
+        fields: ['formatted_address', 'geometry'],
+        types: ['address'],
+        componentRestrictions: { country: 'us' },
+        bounds: nhBounds,
+        strictBounds: true
+      });
+
+      ac.addListener('place_changed', () => {
+        const p = ac.getPlace();
+        if (!p?.formatted_address) return;
+        if (!/,\s*NH\b/i.test(p.formatted_address)) {
+          alert('Pick a New Hampshire address.');
+          return;
+        }
+        input.value = p.formatted_address; // user hits Go when ready
+      });
+    }
+  </script>
+
+  <!-- Load Maps JavaScript API + Places library -->
+  <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=YOUR_REAL_KEY&libraries=places&region=US&callback=initPlaces">
   </script>
 </body>
 </html>
