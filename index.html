@@ -5,10 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>NH Rep Finder (Key Votes)</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    /* Keep Google’s suggestions above everything */
-    .pac-container { z-index: 9999 !important; }
-  </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
   <div class="max-w-md mx-auto p-4 space-y-4">
@@ -17,12 +13,12 @@
       <p class="text-sm text-slate-600">Enter your NH address to see your state reps and their key votes.</p>
     </header>
 
-    <!-- novalidate avoids Chrome’s little “!” lockup -->
+    <!-- No Google scripts; simple form submit -->
     <form id="form" class="flex gap-2" novalidate>
       <input
         id="addr"
         type="search"
-        placeholder="123 Main St, Town"
+        placeholder="123 Main St, Town, NH"
         autocomplete="street-address"
         class="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
       />
@@ -41,15 +37,12 @@
     <section id="result" class="space-y-3"></section>
   </div>
 
-  <!-- Main app script -->
+  <!-- App script -->
   <script>
     const form = document.getElementById('form');
     const addr = document.getElementById('addr');
     const statusEl = document.getElementById('status');
     const resultEl = document.getElementById('result');
-
-    // Don’t submit when user presses Enter in the field
-    addr.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -60,7 +53,6 @@
       statusEl.textContent = 'Looking up…';
       try {
         const q = new URLSearchParams({ address: value });
-        // API on Render
         const r = await fetch('https://repapp-9lq6.onrender.com/lookup?' + q.toString());
         const data = await r.json();
         if (!r.ok) {
@@ -130,40 +122,6 @@
         resultEl.appendChild(card);
       });
     }
-
-    // ---------- Google Places Autocomplete (NH bias), no auto-submit ----------
-    function initPlaces() {
-      const input = document.getElementById('addr');
-      if (!input) return;
-
-      const nhBounds = new google.maps.LatLngBounds(
-        { lat: 42.69, lng: -72.60 }, // SW
-        { lat: 45.31, lng: -70.70 }  // NE
-      );
-
-      const ac = new google.maps.places.Autocomplete(input, {
-        fields: ['formatted_address', 'geometry'],
-        types: ['address'],
-        componentRestrictions: { country: 'us' },
-        bounds: nhBounds,
-        strictBounds: true
-      });
-
-      ac.addListener('place_changed', () => {
-        const p = ac.getPlace();
-        if (!p?.formatted_address) return;
-        if (!/,\s*NH\b/i.test(p.formatted_address)) {
-          alert('Pick a New Hampshire address.');
-          return;
-        }
-        input.value = p.formatted_address; // user hits Go when ready
-      });
-    }
-  </script>
-
-  <!-- Load Maps JavaScript API + Places library -->
-  <script async defer
-    src="https://maps.googleapis.com/maps/api/js?key=YOUR_REAL_KEY&libraries=places&region=US&callback=initPlaces">
   </script>
 </body>
 </html>
